@@ -1,0 +1,11 @@
+build/
+dist/
+__pycache__/
+*.spec
+licencia.key
+sistema_pos.db
+Tickets/
+Reportes/
+ultimo_corte.txt
+.venv/
+venv/
