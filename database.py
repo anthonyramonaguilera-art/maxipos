@@ -1,6 +1,56 @@
 import sqlite3
+import urllib.request
+import json
+from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 
 DB_NAME = "sistema_pos.db"
+
+# Variables globales para el Reloj en la Nube
+_OFFSET_NUBE = timedelta(0)
+SINCRONIZADO_NUBE = False
+
+def sincronizar_reloj_nube():
+    """Obtiene la hora exacta de Internet (UTC-4 Venezuela) sin depender del reloj de la PC."""
+    global _OFFSET_NUBE, SINCRONIZADO_NUBE
+    # 1. Intento vía cabeceras HTTP de alta disponibilidad (Google / Cloudflare)
+    for url in ["https://www.google.com", "https://1.1.1.1"]:
+        try:
+            req = urllib.request.Request(url, method="HEAD", headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                date_str = resp.headers.get('Date')
+                if date_str:
+                    dt_utc = parsedate_to_datetime(date_str).replace(tzinfo=None)
+                    dt_venezuela = dt_utc - timedelta(hours=4)
+                    _OFFSET_NUBE = dt_venezuela - datetime.now()
+                    SINCRONIZADO_NUBE = True
+                    return True
+        except Exception:
+            continue
+
+    # 2. Respaldo vía WorldTimeAPI
+    try:
+        url_api = "https://worldtimeapi.org/api/timezone/America/Caracas"
+        req = urllib.request.Request(url_api, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            dt_str = data["datetime"][:19]
+            dt_venezuela = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S")
+            _OFFSET_NUBE = dt_venezuela - datetime.now()
+            SINCRONIZADO_NUBE = True
+            return True
+    except Exception:
+        pass
+
+    SINCRONIZADO_NUBE = False
+    return False
+
+def obtener_ahora():
+    """Devuelve el objeto datetime actual corregido con el reloj de la nube."""
+    return datetime.now() + _OFFSET_NUBE
+
+def obtener_ahora_sql():
+    return obtener_ahora().strftime("%Y-%m-%d %H:%M:%S")
 
 def conectar_db():
     return sqlite3.connect(DB_NAME)
@@ -99,22 +149,28 @@ def inicializar_db():
 
     c.execute("""CREATE TABLE IF NOT EXISTS Cortes_Z (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_inicio DATETIME,
         fecha_corte DATETIME,
         total_ventas INTEGER,
         total_usd REAL,
         total_bs REAL,
+        costo_usd REAL DEFAULT 0,
         ganancia_usd REAL,
         tasa_bcv REAL,
         desglose_pagos TEXT)""")
 
-    # Migraciones automáticas sin afectar datos existentes
-    for col_sql in [
+    # Migraciones seguras para bases de datos existentes
+    migraciones = [
         "ALTER TABLE Configuracion ADD COLUMN telegram_token TEXT DEFAULT ''",
         "ALTER TABLE Configuracion ADD COLUMN telegram_chat_id TEXT DEFAULT ''",
-        "ALTER TABLE Configuracion ADD COLUMN mostrar_datos_fiscales INTEGER DEFAULT 1"
-    ]:
+        "ALTER TABLE Configuracion ADD COLUMN mostrar_datos_fiscales INTEGER DEFAULT 1",
+        "ALTER TABLE Configuracion ADD COLUMN puerto_balanza TEXT DEFAULT 'COM3'",
+        "ALTER TABLE Cortes_Z ADD COLUMN fecha_inicio DATETIME DEFAULT ''",
+        "ALTER TABLE Cortes_Z ADD COLUMN costo_usd REAL DEFAULT 0"
+    ]
+    for sql in migraciones:
         try:
-            c.execute(col_sql)
+            c.execute(sql)
         except Exception:
             pass
 

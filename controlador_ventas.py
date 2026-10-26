@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 import database
 from controlador_configuracion import ConfigController
 
@@ -8,8 +7,9 @@ class VentasController:
     def procesar_venta(carrito, total_usd, total_bs, tasa, metodo_pago, cliente_id=1, usuario_id=1):
         conn = database.conectar_db()
         c = conn.cursor()
-        ahora_sql = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ahora_ticket = datetime.now().strftime("%d/%m/%Y %H:%M")
+        ahora_dt = database.obtener_ahora()
+        ahora_sql = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
+        ahora_ticket = ahora_dt.strftime("%d/%m/%Y %H:%M:%S")
 
         try:
             c.execute("""INSERT INTO Ventas (fecha, cliente_id, usuario_id, caja_sesion_id, total_usd, total_bs, tasa_aplicada, metodo_pago, estado)
@@ -22,7 +22,7 @@ class VentasController:
                              VALUES (?, ?, ?, ?, ?, ?)""",
                           (venta_id, item['id'], item['cantidad'], item['precio_usd'], item['costo_usd'], item['subtotal_usd']))
 
-                c.execute("UPDATE Productos SET stock_actual = stock_actual - ? WHERE id = ?", (item['cantidad'], item['id']))
+                c.execute("UPDATE Productos SET stock_actual = ROUND(stock_actual - ?, 4) WHERE id = ?", (item['cantidad'], item['id']))
 
                 c.execute("""INSERT INTO Movimientos_Stock (producto_id, tipo_movimiento, cantidad, fecha, referencia)
                              VALUES (?, '- VENTA', ?, ?, ?)""",
@@ -66,17 +66,26 @@ class VentasController:
             f"TICKET NRO: {venta_id:06d}",
             f"TASA BCV: {tasa} Bs/$",
             "--------------------------------",
-            "CANT DESCRIPCION        SUBTOTAL",
+            "CANT/PESO DESCRIPCION   SUBTOTAL",
             "--------------------------------"
         ]
 
         for it in carrito:
-            cant_str = f"{it['cantidad']:4.1f}"
-            nom_str = it['nombre'][:16].ljust(16)
-            sub_str = f"${it['subtotal_usd']:.2f}".rjust(7)
-            lineas.append(f"{cant_str} {nom_str}   {sub_str}")
-            if it['cantidad'] > 1:
-                lineas.append(f"     (Und: ${it['precio_usd']:.2f})")
+            um = it.get('um', 'Unidad')
+            cant = it['cantidad']
+            if um == "KG" and cant < 1.0:
+                cant_str = f"{int(round(cant * 1000))}g".ljust(7)
+            elif um in ["KG", "LITRO"]:
+                cant_str = f"{cant:.3f}{um[:2]}".ljust(7)
+            elif um == "GR":
+                cant_str = f"{cant:.0f}g".ljust(7)
+            else:
+                cant_str = f"{cant:4.1f} ".ljust(7)
+
+            nom_str = it['nombre'][:15].ljust(15)
+            sub_str = f"${it['subtotal_usd']:.2f}".rjust(8)
+            lineas.append(f"{cant_str} {nom_str} {sub_str}")
+            lineas.append(f"        (P.Base: ${it['precio_usd']:.2f}/{um})")
 
         lineas.extend([
             "--------------------------------",
@@ -87,7 +96,6 @@ class VentasController:
             f"  {metodo_pago}",
             "================================",
             "       GRACIAS POR SU COMPRA!   ",
-            "     Powered by Varons Media    ",
             "================================",
             "\n"
         ])
