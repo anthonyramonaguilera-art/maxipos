@@ -6,7 +6,7 @@ import subprocess
 import threading
 from tkinter import messagebox
 
-VERSION_ACTUAL = "2.0"
+VERSION_ACTUAL = "2.1"
 URL_VERSION_JSON = "https://raw.githubusercontent.com/anthonyramonaguilera-art/maxipos/main/version.json"
 
 def verificar_actualizacion_fondo(parent=None):
