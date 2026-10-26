@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
-  "download_url": "https://github.com/anthonyramonaguilera-art/maxipos/releases/download/v2.1/Instalador_MaxiPOS_v2_VaronsMedia.exe",
-  "cambios": "Optimizaciones de rendimiento y mejoras visuales por Varons Media."
+  "version": "2.1",
+  "download_url": "sha256:c91f42aae68ebcfe8be2391300c4c22d9f063a11a24ddf76e74aeb06401f0f5e",
+  "cambios": "Prueba exitosa del sistema de actualización remota de Varons Media."
 }
